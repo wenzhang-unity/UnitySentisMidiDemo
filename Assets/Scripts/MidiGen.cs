@@ -7,11 +7,11 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-[RequireComponent(typeof(Inference))]
+[RequireComponent(typeof(Inference2))]
 [RequireComponent(typeof(AudioSource))]
 public class MidiGen : MonoBehaviour
 {
-    Inference m_Inference;
+    Inference2 m_Inference;
 
     [SerializeField]
     GameObject m_Panel;
@@ -55,7 +55,7 @@ public class MidiGen : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        m_Inference = GetComponent<Inference>();
+        m_Inference = GetComponent<Inference2>();
         m_GenerateButtonText = m_GenerateButton.GetComponentInChildren<TextMeshProUGUI>();
         
         m_GenerateButton.onClick.AddListener(OnGenerateButtonPressed);
