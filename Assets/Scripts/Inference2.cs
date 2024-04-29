@@ -200,15 +200,49 @@ public class Inference2 : MonoBehaviour
         
         startTime = Time.time;
         
-        var mask = new float[tokenizer.vocab_size];
+        var eventNameMask = new float[tokenizer.vocab_size];
+        for (int i = 0; i < eventNameMask.Length; i++)
+        {
+            eventNameMask[i] = 1f;
+        }
         
+        // default mask is all 1
+        using var defaultMaskTensor = new TensorFloat(new TensorShape(1, tokenizer.vocab_size), eventNameMask);
+        
+        // disabling patch_change fixes the instruments 
+        if (disable_patch_change)
+        {
+            eventNameMask[tokenizer.event_ids["patch_change"]] = 0;
+        }
+        if (disable_control_change)
+        {
+            eventNameMask[tokenizer.event_ids["control_change"]] = 0;
+        }
+        using var eventMaskTensor = new TensorFloat(new TensorShape(1, tokenizer.vocab_size), eventNameMask);
+
+        // Disable events that drive the specified channels (part of instrument selection).
+        var channelMask = new float[tokenizer.vocab_size];
+        for (int i = 0; i < channelMask.Length; i++)
+        {
+            channelMask[i] = 1f;
+        }
+
+        if (disable_channels.Length > 0)
+        {
+            var mask_ids = tokenizer.parameter_ids["channel"];
+            foreach (var id in mask_ids)
+            {
+                if (disable_channels.Contains(id))
+                {
+                    channelMask[id] = 0;
+                }
+            }
+        }
+
+        using var channelMaskTensor = new TensorFloat(new TensorShape(1, tokenizer.vocab_size), channelMask);
+
         while (cur_len < max_len)
         {
-            for (int i = 0; i < mask.Length; i++)
-            {
-                mask[i] = 1f;
-            }
-            
             bool end = false;
             engine_base.Execute(input_tensor);
             var hidden_out = engine_base.PeekOutput();
@@ -217,38 +251,22 @@ public class Inference2 : MonoBehaviour
             string event_name = "";
             for (int i = 0; i < max_token_seq; i++)
             {
+                TensorFloat mask;
                 if (i == 0)
                 {
-                    if (disable_patch_change)
-                    {
-                        mask[tokenizer.event_ids["patch_change"]] = 0;
-                    }
-                    if (disable_control_change)
-                        mask[tokenizer.event_ids["control_change"]] = 0;
+                    mask = eventMaskTensor;
                 }
-                else if (disable_channels.Length > 0)
+                else
                 {
-                    var param_name = MidiTokenizer.events[event_name][i - 1];
-                    if (param_name == "channel")
-                    {
-                        var mask_ids = tokenizer.parameter_ids[param_name];
-                        foreach (var id in mask_ids)
-                        {
-                            if (disable_channels.Contains(id))
-                            {
-                                mask[id] = 0;
-                            }
-                        }
-                    }
+                    var param_name = events[event_name][i - 1];
+                    mask = param_name == "channel" ? channelMaskTensor : defaultMaskTensor;
                 }
-
-                using var maskTensor = new TensorFloat(new TensorShape(1, tokenizer.vocab_size), mask);
                 
                 using TensorInt next_token_seq = new TensorInt(new TensorShape(1, i), token_list.ToArray());
             
                 engine_tokenize.SetInput("input_0", hidden_out);
                 engine_tokenize.SetInput("input_1", next_token_seq);
-                engine_tokenize.SetInput("input_2", maskTensor);
+                engine_tokenize.SetInput("input_2", mask);
                 engine_tokenize.Execute();
             
                 var index_array = engine_tokenize.PeekOutput() as TensorInt;
