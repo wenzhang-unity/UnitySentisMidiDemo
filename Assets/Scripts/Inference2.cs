@@ -176,7 +176,7 @@ public class Inference2 : MonoBehaviour
     public float startTime = 0.0f;
     public async Awaitable<int[][]> Generate(CancellationToken cancellationToken)
     {
-        
+        var stopWatch = System.Diagnostics.Stopwatch.StartNew();
         TensorInt input_tensor;
         var presetInputs = k_PresetInputs[instruments];
         var disable_channels = k_ChannelMasks[instruments];
@@ -271,8 +271,9 @@ public class Inference2 : MonoBehaviour
             
                 var index_array = engine_tokenize.PeekOutput() as TensorInt;
 
-                await index_array.CompleteOperationsAndDownloadAsync();
-                int eid = index_array[0];
+                index_array.ToCPU();
+                var data = index_array.ToReadOnlyNativeArray();
+                int eid = data[0];
                 token_list.Add(eid);
                 if (i == 0)
                 {
@@ -300,10 +301,12 @@ public class Inference2 : MonoBehaviour
             cur_len++;
             if (end || cancellationToken.IsCancellationRequested)
                 break;
+            await input_tensor.ToCPUAsync();
             onTokenGenerated?.Invoke(cur_len);
         }
         Debug.Log(cur_len);
-        await input_tensor.CompleteOperationsAndDownloadAsync();
+        await input_tensor.ToCPUAsync();
+        Debug.Log($"Inference took {stopWatch.ElapsedMilliseconds/1000f} s");
         var results = TensorToArray(input_tensor);
         input_tensor.Dispose();
         return results;
