@@ -271,7 +271,8 @@ public class Inference2 : MonoBehaviour
             
                 var index_array = engine_tokenize.PeekOutput() as TensorInt;
 
-                index_array.ToCPU();
+                index_array.ReadbackAndClone();
+                // await index_array.ToCPUAsync();
                 var data = index_array.ToReadOnlyNativeArray();
                 int eid = data[0];
                 token_list.Add(eid);
@@ -301,11 +302,12 @@ public class Inference2 : MonoBehaviour
             cur_len++;
             if (end || cancellationToken.IsCancellationRequested)
                 break;
-            await input_tensor.ToCPUAsync();
+            await input_tensor.ReadbackAndCloneAsync();
             onTokenGenerated?.Invoke(cur_len);
         }
         Debug.Log(cur_len);
-        await input_tensor.ToCPUAsync();
+        // await input_tensor.ReadbackAndCloneAsync();
+        await Awaitable.NextFrameAsync();
         Debug.Log($"Inference took {stopWatch.ElapsedMilliseconds/1000f} s");
         var results = TensorToArray(input_tensor);
         input_tensor.Dispose();
