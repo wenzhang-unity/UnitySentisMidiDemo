@@ -247,8 +247,10 @@ public class Inference2 : MonoBehaviour
             engine_base.Execute(input_tensor);
             var hidden_out = engine_base.PeekOutput();
 
-            List<int> token_list = new List<int>();
+            TensorInt token_seq = TensorInt.AllocNoData(new TensorShape(1, 0));
+            
             string event_name = "";
+            int tokenCount = 0;
             for (int i = 0; i < max_token_seq; i++)
             {
                 TensorFloat mask;
@@ -261,23 +263,26 @@ public class Inference2 : MonoBehaviour
                     var param_name = events[event_name][i - 1];
                     mask = param_name == "channel" ? channelMaskTensor : defaultMaskTensor;
                 }
-                
-                using TensorInt next_token_seq = new TensorInt(new TensorShape(1, i), token_list.ToArray());
             
                 engine_tokenize.SetInput("input_0", hidden_out);
-                engine_tokenize.SetInput("input_1", next_token_seq);
+                engine_tokenize.SetInput("input_1", token_seq);
                 engine_tokenize.SetInput("input_2", mask);
                 engine_tokenize.Execute();
             
                 var index_array = engine_tokenize.PeekOutput() as TensorInt;
-
-                index_array.ReadbackAndClone();
-                // await index_array.ToCPUAsync();
-                var data = index_array.ToReadOnlyNativeArray();
-                int eid = data[0];
-                token_list.Add(eid);
+                
+                var next_token_seq = TensorInt.AllocNoData(new TensorShape(1, i + 1));
+                backend.Concat(new[] { token_seq, index_array }, next_token_seq, 1);
+                
+                token_seq.Dispose();
+                token_seq = next_token_seq;
+                tokenCount++;
                 if (i == 0)
                 {
+                    index_array.ReadbackAndClone();
+                    var data = index_array.ToReadOnlyNativeArray();
+                    int eid = data[0];
+                    
                     if (eid == eos_id)
                     {
                         end = true;
@@ -291,9 +296,8 @@ public class Inference2 : MonoBehaviour
                         break;
                 }
             }
-            TensorInt token_seq = TensorInt.AllocZeros(new TensorShape(1, 1, max_token_seq));
-            for (int jj = 0; jj < token_list.Count; jj++)
-                token_seq[jj] = token_list[jj];
+            
+            token_seq.Reshape(new TensorShape(1, 1, tokenCount));
             var concat_tensor = TensorInt.AllocNoData(new TensorShape(1, input_tensor.shape[1] + 1, input_tensor.shape[2]));
             backend.Concat(new[] { input_tensor, token_seq }, concat_tensor, 1);
             input_tensor.Dispose();
