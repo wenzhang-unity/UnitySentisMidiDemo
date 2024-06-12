@@ -13,7 +13,7 @@ using Unity.Sentis;
 // 256: 65s
 // ~ linear
 // await to not block main thread
-public class Inference2 : MonoBehaviour
+public class Inference : MonoBehaviour
 {
     public enum InstrumentSet
     {
