@@ -5,71 +5,49 @@ using System.Threading;
 using MidiPlayerTK;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
+using UnityEngine.Serialization;
+
+// using UnityEngine.UI;
 
 [RequireComponent(typeof(Inference))]
 [RequireComponent(typeof(AudioSource))]
 public class MidiGen : MonoBehaviour
 {
     Inference m_Inference;
-
-    [SerializeField]
-    GameObject m_Panel;
     
     [SerializeField]
-    Slider m_Slider;
-
-    [SerializeField]
-    Button m_GenerateButton;
-
-    [SerializeField]
-    Button m_PlayButton;
+    MidiStreamPlayer m_MidiPlayer;
     
-    [SerializeField]
-    MidiStreamPlayer m_midiPlayer;
+    public bool IsGenerating { get; private set; }
+    public bool IsPlaying { get; private set; }
+    public bool CanPlay => m_PlayQueues.Count > 0;
+    
+    public int CurrentGenerationLength { get; private set; }
+    
+    public int MaxLength => m_Inference.max_len;
 
-    [SerializeField]
-    OrbitCamera m_Camera;
+    public static event Action<MPTKEvent> OnNotePlayed;
+    
+    public event Action<MPTKEvent> OnNoteGenerated;
     
     readonly List<Queue<MPTKEvent>> m_PlayQueues = new();
 
-    TextMeshProUGUI m_GenerateButtonText;
-    // TextMeshProUGUI m_PlayButtonText;
-
     float m_Bpm = 120;
     double m_StartTick;
-    bool m_Generating;
-    bool m_Playing;
-
-    int m_CurrentGenerationLength;
 
     readonly ConcurrentQueue<MPTKEvent> m_PlayedNotes = new();
 
-    public static event Action<MPTKEvent> OnNotePlayed;
-
     CancellationTokenSource m_CancellationTokenSource;
-
-    int[][] m_LatestGeneration;
-    bool CanPlay => m_LatestGeneration != null;
 
     // Start is called before the first frame update
     void Start()
     {
         m_Inference = GetComponent<Inference>();
-        m_GenerateButtonText = m_GenerateButton.GetComponentInChildren<TextMeshProUGUI>();
-        
-        m_GenerateButton.onClick.AddListener(OnGenerateButtonPressed);
-        m_PlayButton.onClick.AddListener(OnPlayButtonPressed);
-        
-        m_Inference.onTokenGenerated += (length) =>
-        {
-            m_CurrentGenerationLength = length;
-        };
     }
 
     void OnAudioFilterRead(float[] data, int channels)
     {
-        if (!m_Playing) return;
+        if (!IsPlaying) return;
         
         bool hasEvents = false;
         var currentTicks = SecondsToTicks(AudioSettings.dspTime - m_StartTick);
@@ -81,7 +59,7 @@ public class MidiGen : MonoBehaviour
             while (queue.Count > 0 && queue.Peek().Tick < currentTicks)
             {
                 var midiEvent = queue.Dequeue();
-                m_midiPlayer.MPTK_PlayEvent(midiEvent);
+                m_MidiPlayer.MPTK_PlayEvent(midiEvent);
                 if (midiEvent.Command is MPTKCommand.NoteOn)
                 {
                     m_PlayedNotes.Enqueue(midiEvent);
@@ -92,7 +70,7 @@ public class MidiGen : MonoBehaviour
         if (!hasEvents)
         {
             Debug.Log("Done playing");
-            m_Playing = false;
+            IsPlaying = false;
         }
     }
 
@@ -102,83 +80,37 @@ public class MidiGen : MonoBehaviour
         {
             OnNotePlayed?.Invoke(midiEvent);
         }
-
-        m_GenerateButtonText.text = m_Generating ? "Cancel" : "Generate";
-        m_PlayButton.interactable = CanPlay;
-
-        if (m_Generating)
-        {
-            m_Slider.value = (float)m_CurrentGenerationLength / m_Inference.max_len;
-        }
-
-        m_Panel.SetActive(!m_Playing);
-        m_Camera.enabled = m_Playing;
     }
-
-    void OnGenerateButtonPressed()
+    
+    public void CancelGeneration()
     {
-        if (m_Generating)
+        if (IsGenerating)
         {
             m_CancellationTokenSource.Cancel();
         }
-        else
-        {
-            StartGenerating();
-        }
     }
 
-    void OnPlayButtonPressed()
+    public void Play()
     {
-        Play();
-    }
-
-    void Dummy()
-    {
-        if (CanPlay)
-        {
-            if (GUI.Button(new Rect(10, 10, 100, 50), "Play"))
-            {
-                Play();
-            }
-        }
-        else if (m_Generating)
-        {
-            if (GUI.Button(new Rect(10, 10, 100, 50), "Cancel"))
-            {
-                m_CancellationTokenSource.Cancel();
-            }
-        }
-        else
-        {
-            if (GUI.Button(new Rect(10, 10, 100, 50), "Generate"))
-            {
-                StartGenerating();
-            }
-        }
-    }
-
-    void Play()
-    {
-        if (m_Playing) return;
+        if (IsPlaying) return;
         
-        QueueEvents(m_Inference.tokenizer.detokenize(m_LatestGeneration));
+        // QueueEvents(m_Inference.tokenizer.detokenize(m_LatestGeneration).Item1);
         
-        m_Playing = true;
+        IsPlaying = true;
         m_StartTick = AudioSettings.dspTime;
         Debug.Log("Start playing");
-        // StartCoroutine(PlayEvents());
     }
 
     void QueueEvents(List<List<MidiTokenizer.Event>> events)
     {
-        for (int i = 0; i < events.Count; i++)
+        for (int trackIndex = 0; trackIndex < events.Count; trackIndex++)
         {
-            while (m_PlayQueues.Count <= i)
+            while (m_PlayQueues.Count <= trackIndex)
             {
                 m_PlayQueues.Add(new Queue<MPTKEvent>());
             }
 
-            var track = events[i];
+            var track = events[trackIndex];
             foreach (var ev in track)
             {
                 var midiEvent = new MPTKEvent
@@ -194,9 +126,10 @@ public class MidiGen : MonoBehaviour
                     midiEvent.Value = ev.parameters[3];
                     midiEvent.Velocity = ev.parameters[4];
 
-                    Debug.Log($"note: {midiEvent.Channel}, {midiEvent.Value}");
+                    Debug.Log($"note: {midiEvent.Channel}, {midiEvent.Value}, {midiEvent.Tick}");
                     
-                    m_PlayQueues[i].Enqueue(midiEvent);
+                    m_PlayQueues[trackIndex].Enqueue(midiEvent);
+                    OnNoteGenerated?.Invoke(midiEvent);
                 }
                 else if (ev.name == "patch_change")
                 {
@@ -224,12 +157,12 @@ public class MidiGen : MonoBehaviour
                         Debug.Log($"set_tempo: {m_Bpm}");
                     }
                 }
-                m_PlayQueues[i].Enqueue(midiEvent);
+                m_PlayQueues[trackIndex].Enqueue(midiEvent);
             }
         }
     }
 
-    long TicksToMilliseconds(int ticks)
+    long TicksToMilliseconds(long ticks)
     {
         var beats = (double)ticks / MidiTokenizer.ticks_per_beat;
         var minutes = beats / m_Bpm;
@@ -243,18 +176,38 @@ public class MidiGen : MonoBehaviour
         return (long)ticks;
     }
 
-    async void StartGenerating()
+    // async void StartGenerating()
+    // {
+    //     m_CancellationTokenSource = new CancellationTokenSource();
+    //
+    //     m_Generating = true;
+    //     
+    //     m_LatestGeneration = null;
+    //     m_LatestGeneration = await m_Inference.Generate(m_CancellationTokenSource.Token);
+    //     
+    //     // var seq = m_Inference.results;
+    //     // Play();
+    //
+    //     m_Generating = false;
+    // }
+
+    public async void GenerateAsync()
     {
+        m_PlayQueues.Clear();
+        CurrentGenerationLength = 0;
+        
         m_CancellationTokenSource = new CancellationTokenSource();
+        IsGenerating = true;
 
-        m_Generating = true;
+        var currentTicks = 0;
+        await foreach(var tokenSequence in m_Inference.GenerateAsync(m_CancellationTokenSource.Token))
+        {
+            var (events, ticks) = m_Inference.tokenizer.detokenize(tokenSequence, currentTicks);
+            QueueEvents(events);
+            currentTicks = ticks;
+            CurrentGenerationLength += tokenSequence.Length;
+        }
         
-        m_LatestGeneration = null;
-        m_LatestGeneration = await m_Inference.Generate(m_CancellationTokenSource.Token);
-        
-        // var seq = m_Inference.results;
-        // Play();
-
-        m_Generating = false;
+        IsGenerating = false;
     }
 }

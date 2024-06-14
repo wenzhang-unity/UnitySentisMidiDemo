@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using UnityEngine;
 using Unity.Sentis;
@@ -92,7 +93,7 @@ public class Inference : MonoBehaviour
     public bool gpu_backend = true;
 
     bool m_KeepGoing;
-    public event Action<int> onTokenGenerated;
+    // public event Action<int> onTokenGenerated;
     
     // TensorInt input_tensor;
 
@@ -307,7 +308,7 @@ public class Inference : MonoBehaviour
             if (end || cancellationToken.IsCancellationRequested)
                 break;
             await input_tensor.ReadbackAndCloneAsync();
-            onTokenGenerated?.Invoke(cur_len);
+            // onTokenGenerated?.Invoke(cur_len);
         }
         Debug.Log(cur_len);
         // await input_tensor.ReadbackAndCloneAsync();
@@ -316,6 +317,150 @@ public class Inference : MonoBehaviour
         var results = TensorToArray(input_tensor);
         input_tensor.Dispose();
         return results;
+    }
+
+    public async IAsyncEnumerable<int[][]> GenerateAsync([EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var stopWatch = System.Diagnostics.Stopwatch.StartNew();
+        TensorInt input_tensor;
+        var presetInputs = k_PresetInputs[instruments];
+        var disable_channels = k_ChannelMasks[instruments];
+        bool disable_patch_change = false;
+
+        int cur_len = 1;
+        if (presetInputs.Length > 0)
+        {
+            // Start with patch events
+            TensorShape shape = new TensorShape(1, presetInputs.Length / max_token_seq, max_token_seq);
+            input_tensor = new TensorInt(shape, presetInputs);
+            disable_patch_change = true;
+            cur_len = input_tensor.shape[1];
+        }
+        else
+        {
+            // Start with empty tensor
+            input_tensor = TensorInt.AllocZeros(new TensorShape(1, 1, max_token_seq));
+            input_tensor[0] = bos_id;
+        }
+        
+        startTime = Time.time;
+        
+        var eventNameMask = new float[tokenizer.vocab_size];
+        for (int i = 0; i < eventNameMask.Length; i++)
+        {
+            eventNameMask[i] = 1f;
+        }
+        
+        // default mask is all 1
+        using var defaultMaskTensor = new TensorFloat(new TensorShape(1, tokenizer.vocab_size), eventNameMask);
+        
+        // disabling patch_change fixes the instruments 
+        if (disable_patch_change)
+        {
+            eventNameMask[tokenizer.event_ids["patch_change"]] = 0;
+        }
+        if (disable_control_change)
+        {
+            eventNameMask[tokenizer.event_ids["control_change"]] = 0;
+        }
+        using var eventMaskTensor = new TensorFloat(new TensorShape(1, tokenizer.vocab_size), eventNameMask);
+
+        // Disable events that drive the specified channels (part of instrument selection).
+        var channelMask = new float[tokenizer.vocab_size];
+        for (int i = 0; i < channelMask.Length; i++)
+        {
+            channelMask[i] = 1f;
+        }
+
+        if (disable_channels.Length > 0)
+        {
+            var mask_ids = tokenizer.parameter_ids["channel"];
+            foreach (var id in mask_ids)
+            {
+                if (disable_channels.Contains(id))
+                {
+                    channelMask[id] = 0;
+                }
+            }
+        }
+
+        using var channelMaskTensor = new TensorFloat(new TensorShape(1, tokenizer.vocab_size), channelMask);
+
+        while (cur_len < max_len)
+        {
+            bool end = false;
+            engine_base.Execute(input_tensor);
+            var hidden_out = engine_base.PeekOutput();
+
+            TensorInt token_seq = TensorInt.AllocNoData(new TensorShape(1, 0));
+            
+            string event_name = "";
+            int tokenCount = 0;
+            for (int i = 0; i < max_token_seq; i++)
+            {
+                TensorFloat mask;
+                if (i == 0)
+                {
+                    mask = eventMaskTensor;
+                }
+                else
+                {
+                    var param_name = events[event_name][i - 1];
+                    mask = param_name == "channel" ? channelMaskTensor : defaultMaskTensor;
+                }
+            
+                engine_tokenize.SetInput("input_0", hidden_out);
+                engine_tokenize.SetInput("input_1", token_seq);
+                engine_tokenize.SetInput("input_2", mask);
+                engine_tokenize.Execute();
+            
+                var index_array = engine_tokenize.PeekOutput() as TensorInt;
+                
+                var next_token_seq = TensorInt.AllocNoData(new TensorShape(1, i + 1));
+                backend.Concat(new[] { token_seq, index_array }, next_token_seq, 1);
+                
+                token_seq.Dispose();
+                token_seq = next_token_seq;
+                tokenCount++;
+                if (i == 0)
+                {
+                    index_array.ReadbackAndClone();
+                    var data = index_array.ToReadOnlyNativeArray();
+                    int eid = data[0];
+                    
+                    if (eid == eos_id)
+                    {
+                        end = true;
+                        break;
+                    }
+                    event_name = id_events[eid];
+                }
+                else
+                {
+                    if (events[event_name].Count == i)
+                        break;
+                }
+            }
+            
+            token_seq.Reshape(new TensorShape(1, 1, tokenCount));
+            await token_seq.ReadbackAndCloneAsync();
+            yield return TensorToArray(token_seq);
+            
+            var concat_tensor = TensorInt.AllocNoData(new TensorShape(1, input_tensor.shape[1] + 1, input_tensor.shape[2]));
+            backend.Concat(new[] { input_tensor, token_seq }, concat_tensor, 1);
+            input_tensor.Dispose();
+            token_seq.Dispose();
+            input_tensor = concat_tensor;
+            cur_len++;
+            if (end || cancellationToken.IsCancellationRequested)
+                break;
+            // await input_tensor.ReadbackAndCloneAsync();
+            // onTokenGenerated?.Invoke(cur_len);
+        }
+        // Debug.Log(cur_len);
+        // await input_tensor.ReadbackAndCloneAsync();
+        Debug.Log($"Inference took {stopWatch.ElapsedMilliseconds/1000f} s");
+        input_tensor.Dispose();
     }
 
     int[][] TensorToArray(TensorInt tensor)

@@ -89,10 +89,10 @@ public class MidiTokenizer
         public List<int> parameters;
     }
 
-    public List<List<Event>> detokenize(IEnumerable<IList<int>> mid_seq)
+    public (List<List<Event>>, int) detokenize(IEnumerable<IList<int>> mid_seq, int startTicks = 0)
     {
         var tracks_dict = DictionaryPool<int, List<Event>>.Get();
-        int t1 = 0;
+        int t1 = startTicks;
 
         var parameters = ListPool<int>.Get();
         
@@ -207,6 +207,6 @@ public class MidiTokenizer
         ListPool<int>.Release(parameters);
         DictionaryPool<int, List<Event>>.Release(tracks_dict);
 
-        return tracks;
+        return (tracks, t1);
     }
 }
