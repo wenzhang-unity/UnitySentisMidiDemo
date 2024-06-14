@@ -544,7 +544,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 1556739779}
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &430485484
 MonoBehaviour:
@@ -558,9 +558,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c20a2a9fdae74344d9e243ccc18b0016, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_BackgroundMaterial: {fileID: 2100000, guid: 1d482399fd910ca4e9c255c8e6d7e2fc,
-    type: 2}
-  m_NoteMaterial: {fileID: 2100000, guid: 1d482399fd910ca4e9c255c8e6d7e2fc, type: 2}
+  m_WindowSize: 10000
+  m_BackgroundPrefab: {fileID: 1112015295974353579, guid: cb8e26c4896dce34a967894441080d91,
+    type: 3}
+  m_NotePrefab: {fileID: 973333424844639897, guid: 0c4eaf83e6ed9864e99478ca3319f868,
+    type: 3}
 --- !u!1 &443205066
 GameObject:
   m_ObjectHideFlags: 0
@@ -643,19 +645,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 443205069}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 430485484}
-        m_TargetAssemblyTypeName: PianoRoll, SentisMidi
-        m_MethodName: Clear
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
+      m_Calls: []
 --- !u!114 &443205069
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -964,7 +954,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!64 &673019385
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -1898,7 +1888,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!135 &1487261404
 SphereCollider:
   m_ObjectHideFlags: 0
@@ -2078,8 +2068,7 @@ Transform:
   m_LocalPosition: {x: 0, y: 3.15, z: -10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 430485483}
+  m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 11.117, y: 0, z: 0}
 --- !u!114 &1556739780
@@ -2516,7 +2505,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6ff319057c4fd7b40888aaab95d5f18e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_midiPlayer: {fileID: 1335607465}
+  m_MidiPlayer: {fileID: 1335607465}
 --- !u!4 &1778443043
 Transform:
   m_ObjectHideFlags: 0
@@ -2915,7 +2904,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1953335318
 Transform:
   m_ObjectHideFlags: 0
@@ -3428,3 +3417,4 @@ SceneRoots:
   - {fileID: 1953335318}
   - {fileID: 1556739779}
   - {fileID: 1882592288}
+  - {fileID: 430485483}

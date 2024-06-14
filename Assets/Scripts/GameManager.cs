@@ -41,7 +41,12 @@ public class GameManager : MonoBehaviour
 
     void OnNoteGenerated(MPTKEvent note)
     {
-        m_PianoRoll.Add(note);
+        m_PianoRoll.Add(new PianoRoll.Note(
+            note.Channel,
+            note.Value,
+            m_MidiGen.TicksToMilliseconds(note.Tick),
+            note.Duration
+        ));
     }
 
     void OnGenerateButtonPressed()
@@ -58,7 +63,6 @@ public class GameManager : MonoBehaviour
     
     void OnPlayButtonPressed()
     {
-        m_PianoRoll.Clear();
         m_MidiGen.Play();
     }
 

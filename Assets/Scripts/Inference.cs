@@ -386,6 +386,11 @@ public class Inference : MonoBehaviour
 
         using var channelMaskTensor = new TensorFloat(new TensorShape(1, tokenizer.vocab_size), channelMask);
 
+        if (input_tensor.shape[1] > 0)
+        {
+            yield return TensorToArray(input_tensor);
+        }
+        
         while (cur_len < max_len)
         {
             bool end = false;

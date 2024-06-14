@@ -3,9 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using MidiPlayerTK;
-using TMPro;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 // using UnityEngine.UI;
 
@@ -162,7 +160,7 @@ public class MidiGen : MonoBehaviour
         }
     }
 
-    long TicksToMilliseconds(long ticks)
+    public long TicksToMilliseconds(long ticks)
     {
         var beats = (double)ticks / MidiTokenizer.ticks_per_beat;
         var minutes = beats / m_Bpm;
