@@ -37,6 +37,12 @@ public class GameManager : MonoBehaviour
         m_PlayButton.onClick.AddListener(OnPlayButtonPressed);
         
         m_MidiGen.OnNoteGenerated += OnNoteGenerated;
+        m_MidiGen.OnPlayTimeChanged += OnPlayTimeChanged;
+    }
+
+    void OnPlayTimeChanged(long note)
+    {
+        m_PianoRoll.Play(note);
     }
 
     void OnNoteGenerated(MPTKEvent note)

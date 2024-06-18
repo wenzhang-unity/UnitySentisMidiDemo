@@ -24,9 +24,13 @@ public class MidiGen : MonoBehaviour
     
     public int MaxLength => m_Inference.max_len;
 
-    public static event Action<MPTKEvent> OnNotePlayed;
+    public event Action<MPTKEvent> OnNotePlayed;
     
     public event Action<MPTKEvent> OnNoteGenerated;
+    
+    public event Action<long> OnPlayTimeChanged;
+    
+    long m_CurrentPlayTime;
     
     readonly List<Queue<MPTKEvent>> m_PlayQueues = new();
 
@@ -49,6 +53,7 @@ public class MidiGen : MonoBehaviour
         
         bool hasEvents = false;
         var currentTicks = SecondsToTicks(AudioSettings.dspTime - m_StartTick);
+        m_CurrentPlayTime = TicksToMilliseconds(currentTicks);
         foreach (var queue in m_PlayQueues)
         {
             if (queue.Count == 0) continue;
@@ -77,6 +82,11 @@ public class MidiGen : MonoBehaviour
         while (m_PlayedNotes.TryDequeue(out var midiEvent))
         {
             OnNotePlayed?.Invoke(midiEvent);
+        }
+
+        if (IsPlaying)
+        {
+            OnPlayTimeChanged?.Invoke(m_CurrentPlayTime);
         }
     }
     

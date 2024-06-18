@@ -37,7 +37,7 @@ public class Visualizer : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        MidiGen.OnNotePlayed += React;
+        // MidiGen.OnNotePlayed += React;
         m_Material = GetComponent<Renderer>().material;
         m_StartColor = m_Material.GetColor(k_EmissionColor);
         

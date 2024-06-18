@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Pool;
@@ -38,6 +37,7 @@ public class PianoRoll : MonoBehaviour
 
     readonly List<Note> m_Notes = new List<Note>();
     readonly Stack<Transform> m_ActiveNotes = new Stack<Transform>();
+    readonly HashSet<(int, long, long)> m_ActiveNotesSet = new();
 
     MeshFilter m_PlaneMeshFilter;
 
@@ -67,6 +67,7 @@ public class PianoRoll : MonoBehaviour
 
     MaterialPropertyBlock[] m_NotePropertyBlocks;
     static readonly int k_Color = Shader.PropertyToID("_BaseColor");
+    static readonly int k_EmissionColor = Shader.PropertyToID("_EmissionColor");
 
     // Start is called before the first frame update
     void Start()
@@ -101,10 +102,25 @@ public class PianoRoll : MonoBehaviour
             m_NoteObjectPool.Release(m_ActiveNotes.Pop());
         }
         
+        m_ActiveNotesSet.Clear();
+        
         foreach (var note in m_Notes)
         {
-            DrawNote(note, bounds);
+            var noteEnd = note.Start + note.Duration;
+            var played = m_PlayHead >= note.Start && m_PlayHead <= noteEnd;
+            if (!m_ActiveNotesSet.Add((note.Value, note.Start, note.Duration)))
+            {
+                continue;
+            }
+            DrawNote(note, bounds, played);
         }
+    }
+    
+    public void Play(long time)
+    {
+        // Clamp to the nearest window
+        m_PlayHead = time;
+        m_WindowStart = time - time % m_WindowSize;
     }
 
     public void Clear()
@@ -122,7 +138,7 @@ public class PianoRoll : MonoBehaviour
         }
     }
 
-    void DrawNote(in Note note, Bounds bounds)
+    void DrawNote(in Note note, Bounds bounds, bool played = false)
     {
         var start = note.Start;
         var end = note.Start + note.Duration;
@@ -149,7 +165,9 @@ public class PianoRoll : MonoBehaviour
         
         noteTransform.localScale = new Vector3(width, 1f, height);
         noteRenderer.SetPropertyBlock(m_NotePropertyBlocks[note.Channel % m_NotePropertyBlocks.Length]);
-        
+
+        noteRenderer.material.SetColor(k_EmissionColor, played ? k_NoteColors[note.Channel % k_NoteColors.Length] : Color.black);
+
         m_ActiveNotes.Push(noteTransform);
     }
 }
